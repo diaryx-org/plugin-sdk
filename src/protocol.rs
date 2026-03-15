@@ -1,0 +1,220 @@
+//! JSON protocol types shared between the host and guest WASM plugins.
+//!
+//! These are the canonical guest-side definitions matching the host's
+//! `diaryx_extism::protocol` module. By depending on this SDK, plugins no
+//! longer need to maintain their own copies of these types.
+
+use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
+
+/// The current protocol version supported by this SDK.
+pub const CURRENT_PROTOCOL_VERSION: u32 = 1;
+
+/// The minimum protocol version the host can still load.
+pub const MIN_SUPPORTED_PROTOCOL_VERSION: u32 = 1;
+
+fn default_protocol_version() -> u32 {
+    1
+}
+
+// ---------------------------------------------------------------------------
+// Permissions
+// ---------------------------------------------------------------------------
+
+/// Plugin-declared default permissions and human-readable reasons.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct GuestRequestedPermissions {
+    /// Default permission rules to apply at install time.
+    #[serde(default)]
+    pub defaults: serde_json::Value,
+    /// Why each permission is needed, keyed by permission field name.
+    #[serde(default)]
+    pub reasons: HashMap<String, String>,
+}
+
+// ---------------------------------------------------------------------------
+// Manifest
+// ---------------------------------------------------------------------------
+
+/// Manifest returned by the guest's exported `manifest` function.
+///
+/// The host calls `manifest("")` at load time and caches the result.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GuestManifest {
+    /// Protocol version this guest was built against.
+    ///
+    /// Omitting defaults to 1 for backward compatibility with existing plugins.
+    #[serde(default = "default_protocol_version")]
+    pub protocol_version: u32,
+    /// Unique plugin identifier (e.g., `"diaryx.myplugin"`).
+    pub id: String,
+    /// Human-readable name.
+    pub name: String,
+    /// SemVer version string.
+    pub version: String,
+    /// Short description of what this plugin does.
+    pub description: String,
+    /// Capability strings this plugin requests.
+    ///
+    /// Known values: `"file_events"`, `"workspace_events"`, `"custom_commands"`,
+    /// `"editor_extension"`, `"command"`, `"lifecycle"`.
+    pub capabilities: Vec<String>,
+    /// Serialized UI contribution values.
+    ///
+    /// The host deserializes each element into the core `UiContribution` enum.
+    #[serde(default)]
+    pub ui: Vec<serde_json::Value>,
+    /// Custom command names this plugin handles (e.g., `["word-count"]`).
+    #[serde(default)]
+    pub commands: Vec<String>,
+    /// CLI subcommand declarations (deserialized into `CliCommand` by the host).
+    #[serde(default)]
+    pub cli: Vec<serde_json::Value>,
+    /// Optional default permission request + rationale shown during install.
+    #[serde(default)]
+    pub requested_permissions: Option<GuestRequestedPermissions>,
+}
+
+// ---------------------------------------------------------------------------
+// Events
+// ---------------------------------------------------------------------------
+
+/// Event sent to the guest's `on_event` function.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GuestEvent {
+    /// Event type identifier.
+    ///
+    /// Known values:
+    /// - `"workspace_opened"`, `"workspace_closed"`, `"workspace_changed"`, `"workspace_committed"`
+    /// - `"file_saved"`, `"file_created"`, `"file_deleted"`, `"file_moved"`
+    pub event_type: String,
+    /// Event-specific payload (varies by event type).
+    pub payload: serde_json::Value,
+}
+
+// ---------------------------------------------------------------------------
+// Commands
+// ---------------------------------------------------------------------------
+
+/// Command request sent to the guest's `handle_command` function.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommandRequest {
+    /// Command name (matches one of the guest's declared commands).
+    pub command: String,
+    /// Command parameters.
+    pub params: serde_json::Value,
+}
+
+/// Response returned by the guest from `handle_command`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommandResponse {
+    /// Whether the command succeeded.
+    pub success: bool,
+    /// Result data (present on success).
+    #[serde(default)]
+    pub data: Option<serde_json::Value>,
+    /// Error message (present on failure).
+    #[serde(default)]
+    pub error: Option<String>,
+    /// Optional structured error code (e.g., `"permission_denied"`, `"config_error"`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_code: Option<String>,
+}
+
+impl CommandResponse {
+    /// Create a successful response with data.
+    pub fn ok(data: serde_json::Value) -> Self {
+        Self {
+            success: true,
+            data: Some(data),
+            error: None,
+            error_code: None,
+        }
+    }
+
+    /// Create a successful response with no data.
+    pub fn ok_empty() -> Self {
+        Self {
+            success: true,
+            data: None,
+            error: None,
+            error_code: None,
+        }
+    }
+
+    /// Create an error response.
+    pub fn err(message: impl Into<String>) -> Self {
+        Self {
+            success: false,
+            data: None,
+            error: Some(message.into()),
+            error_code: None,
+        }
+    }
+
+    /// Create an error response with a structured error code.
+    pub fn err_with_code(message: impl Into<String>, code: impl Into<String>) -> Self {
+        Self {
+            success: false,
+            data: None,
+            error: Some(message.into()),
+            error_code: Some(code.into()),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn guest_manifest_roundtrip() {
+        let manifest = GuestManifest {
+            protocol_version: 1,
+            id: "diaryx.test".into(),
+            name: "Test Plugin".into(),
+            version: "0.1.0".into(),
+            description: "A test plugin".into(),
+            capabilities: vec!["custom_commands".into()],
+            ui: vec![],
+            commands: vec!["do-thing".into()],
+            cli: vec![],
+            requested_permissions: None,
+        };
+        let json = serde_json::to_string(&manifest).unwrap();
+        let parsed: GuestManifest = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.id, "diaryx.test");
+        assert_eq!(parsed.commands, vec!["do-thing"]);
+    }
+
+    #[test]
+    fn manifest_defaults_protocol_version() {
+        let json =
+            r#"{"id":"test","name":"T","version":"1.0","description":"d","capabilities":[]}"#;
+        let m: GuestManifest = serde_json::from_str(json).unwrap();
+        assert_eq!(m.protocol_version, 1);
+    }
+
+    #[test]
+    fn command_response_helpers() {
+        let ok = CommandResponse::ok(serde_json::json!({"count": 42}));
+        assert!(ok.success);
+        assert_eq!(ok.data.unwrap()["count"], 42);
+
+        let err = CommandResponse::err("oops");
+        assert!(!err.success);
+        assert_eq!(err.error.as_deref(), Some("oops"));
+
+        let err_code = CommandResponse::err_with_code("denied", "permission_denied");
+        assert_eq!(err_code.error_code.as_deref(), Some("permission_denied"));
+    }
+
+    #[test]
+    fn command_response_without_error_code() {
+        let json = r#"{"success":false,"error":"oops"}"#;
+        let resp: CommandResponse = serde_json::from_str(json).unwrap();
+        assert!(!resp.success);
+        assert!(resp.error_code.is_none());
+    }
+}
