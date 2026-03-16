@@ -5,6 +5,7 @@ edition = "2024"
 rust-version = "1.91"
 description = "SDK for building Diaryx Extism WASM plugins"
 license = "MIT"
+repository = "https://github.com/diaryx-org/plugin-sdk"
 publish = true
 
 [lib]
