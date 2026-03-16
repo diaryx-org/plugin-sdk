@@ -58,7 +58,7 @@ pub struct GuestManifest {
     /// Capability strings this plugin requests.
     ///
     /// Known values: `"file_events"`, `"workspace_events"`, `"custom_commands"`,
-    /// `"editor_extension"`, `"command"`, `"lifecycle"`.
+    /// `"editor_extension"`, `"media_transcoder"`, `"command"`, `"lifecycle"`.
     pub capabilities: Vec<String>,
     /// Serialized UI contribution values.
     ///
@@ -74,6 +74,9 @@ pub struct GuestManifest {
     /// Optional default permission request + rationale shown during install.
     #[serde(default)]
     pub requested_permissions: Option<GuestRequestedPermissions>,
+    /// Supported conversion pairs for `media_transcoder` capability (e.g. `["heic:jpeg"]`).
+    #[serde(default)]
+    pub conversions: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -181,6 +184,7 @@ mod tests {
             commands: vec!["do-thing".into()],
             cli: vec![],
             requested_permissions: None,
+            conversions: vec![],
         };
         let json = serde_json::to_string(&manifest).unwrap();
         let parsed: GuestManifest = serde_json::from_str(&json).unwrap();
