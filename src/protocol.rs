@@ -82,6 +82,13 @@ pub struct GuestManifest {
     /// Supported conversion pairs for `media_transcoder` capability (e.g. `["heic:jpeg"]`).
     #[serde(default)]
     pub conversions: Vec<String>,
+    /// Minimum Diaryx version required to run this plugin (e.g. `"1.4.0"`).
+    ///
+    /// The host checks this at load time and rejects the plugin with a
+    /// user-friendly message when the running app is too old. `None` means
+    /// the plugin is compatible with any version.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_app_version: Option<String>,
 }
 
 impl GuestManifest {
@@ -106,6 +113,7 @@ impl GuestManifest {
             cli: vec![],
             requested_permissions: None,
             conversions: vec![],
+            min_app_version: None,
         }
     }
 
@@ -136,6 +144,12 @@ impl GuestManifest {
     /// Set media transcoder conversion pairs (e.g. `["heic:jpeg"]`).
     pub fn conversions(mut self, conversions: Vec<String>) -> Self {
         self.conversions = conversions;
+        self
+    }
+
+    /// Set the minimum Diaryx version required (e.g. `"1.4.0"`).
+    pub fn min_app_version(mut self, version: impl Into<String>) -> Self {
+        self.min_app_version = Some(version.into());
         self
     }
 }
