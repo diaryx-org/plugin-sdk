@@ -30,18 +30,14 @@
 //!
 //! #[plugin_fn]
 //! pub fn manifest(_input: String) -> FnResult<String> {
-//!     let manifest = GuestManifest {
-//!         protocol_version: CURRENT_PROTOCOL_VERSION,
-//!         id: "diaryx.myplugin".into(),
-//!         name: "My Plugin".into(),
-//!         version: env!("CARGO_PKG_VERSION").into(),
-//!         description: "Does cool things".into(),
-//!         capabilities: vec!["custom_commands".into()],
-//!         ui: vec![],
-//!         commands: vec!["my-command".into()],
-//!         cli: vec![],
-//!         requested_permissions: None,
-//!     };
+//!     let manifest = GuestManifest::new(
+//!         "diaryx.myplugin",
+//!         "My Plugin",
+//!         env!("CARGO_PKG_VERSION"),
+//!         "Does cool things",
+//!         vec!["custom_commands".into()],
+//!     )
+//!     .commands(vec!["my-command".into()]);
 //!     Ok(serde_json::to_string(&manifest)?)
 //! }
 //!

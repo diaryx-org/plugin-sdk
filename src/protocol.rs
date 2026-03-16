@@ -40,7 +40,12 @@ pub struct GuestRequestedPermissions {
 /// Manifest returned by the guest's exported `manifest` function.
 ///
 /// The host calls `manifest("")` at load time and caches the result.
+///
+/// Use [`GuestManifest::new`] to construct — only `id`, `name`, `version`,
+/// `description`, and `capabilities` are required. All other fields default
+/// to empty/`None` and can be set via builder-style methods.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GuestManifest {
     /// Protocol version this guest was built against.
     ///
@@ -77,6 +82,62 @@ pub struct GuestManifest {
     /// Supported conversion pairs for `media_transcoder` capability (e.g. `["heic:jpeg"]`).
     #[serde(default)]
     pub conversions: Vec<String>,
+}
+
+impl GuestManifest {
+    /// Create a manifest with the required fields. Optional fields default to
+    /// empty and can be set with the builder methods below.
+    pub fn new(
+        id: impl Into<String>,
+        name: impl Into<String>,
+        version: impl Into<String>,
+        description: impl Into<String>,
+        capabilities: Vec<String>,
+    ) -> Self {
+        Self {
+            protocol_version: CURRENT_PROTOCOL_VERSION,
+            id: id.into(),
+            name: name.into(),
+            version: version.into(),
+            description: description.into(),
+            capabilities,
+            ui: vec![],
+            commands: vec![],
+            cli: vec![],
+            requested_permissions: None,
+            conversions: vec![],
+        }
+    }
+
+    /// Set UI contributions.
+    pub fn ui(mut self, ui: Vec<serde_json::Value>) -> Self {
+        self.ui = ui;
+        self
+    }
+
+    /// Set custom command names.
+    pub fn commands(mut self, commands: Vec<String>) -> Self {
+        self.commands = commands;
+        self
+    }
+
+    /// Set CLI subcommand declarations.
+    pub fn cli(mut self, cli: Vec<serde_json::Value>) -> Self {
+        self.cli = cli;
+        self
+    }
+
+    /// Set requested permissions.
+    pub fn requested_permissions(mut self, perms: GuestRequestedPermissions) -> Self {
+        self.requested_permissions = Some(perms);
+        self
+    }
+
+    /// Set media transcoder conversion pairs (e.g. `["heic:jpeg"]`).
+    pub fn conversions(mut self, conversions: Vec<String>) -> Self {
+        self.conversions = conversions;
+        self
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -173,19 +234,14 @@ mod tests {
 
     #[test]
     fn guest_manifest_roundtrip() {
-        let manifest = GuestManifest {
-            protocol_version: 1,
-            id: "diaryx.test".into(),
-            name: "Test Plugin".into(),
-            version: "0.1.0".into(),
-            description: "A test plugin".into(),
-            capabilities: vec!["custom_commands".into()],
-            ui: vec![],
-            commands: vec!["do-thing".into()],
-            cli: vec![],
-            requested_permissions: None,
-            conversions: vec![],
-        };
+        let manifest = GuestManifest::new(
+            "diaryx.test",
+            "Test Plugin",
+            "0.1.0",
+            "A test plugin",
+            vec!["custom_commands".into()],
+        )
+        .commands(vec!["do-thing".into()]);
         let json = serde_json::to_string(&manifest).unwrap();
         let parsed: GuestManifest = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.id, "diaryx.test");
