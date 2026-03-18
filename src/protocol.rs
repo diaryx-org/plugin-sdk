@@ -89,6 +89,13 @@ pub struct GuestManifest {
     /// the plugin is compatible with any version.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub min_app_version: Option<String>,
+    /// Server-side API endpoints this plugin interacts with.
+    ///
+    /// Declarative metadata: documents the contract between plugin and server.
+    /// The server implements these routes as standard handlers; the client plugin
+    /// calls them. Used for documentation, validation, and future marketplace tooling.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub server_functions: Vec<ServerFunctionDecl>,
 }
 
 impl GuestManifest {
@@ -114,6 +121,7 @@ impl GuestManifest {
             requested_permissions: None,
             conversions: vec![],
             min_app_version: None,
+            server_functions: vec![],
         }
     }
 
@@ -152,6 +160,33 @@ impl GuestManifest {
         self.min_app_version = Some(version.into());
         self
     }
+
+    /// Declare server-side API endpoints this plugin interacts with.
+    pub fn server_functions(mut self, fns: Vec<ServerFunctionDecl>) -> Self {
+        self.server_functions = fns;
+        self
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Server functions
+// ---------------------------------------------------------------------------
+
+/// Declares a server-side API endpoint this plugin interacts with.
+///
+/// This is declarative metadata — the server implements these routes as
+/// standard Rust handlers, and the client plugin calls them. The declaration
+/// documents the plugin↔server contract and enables tooling validation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerFunctionDecl {
+    /// Logical name for this function (e.g. `"sync_ws"`, `"put_html"`).
+    pub name: String,
+    /// HTTP method or `"WS"` for WebSocket (e.g. `"GET"`, `"PUT"`, `"POST"`, `"WS"`).
+    pub method: String,
+    /// URL path with optional `{param}` segments (e.g. `"/namespaces/{id}/objects/{key}"`).
+    pub path: String,
+    /// Human-readable description of what this endpoint does.
+    pub description: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -290,5 +325,48 @@ mod tests {
         let resp: CommandResponse = serde_json::from_str(json).unwrap();
         assert!(!resp.success);
         assert!(resp.error_code.is_none());
+    }
+
+    #[test]
+    fn server_function_decl_roundtrip() {
+        let decl = ServerFunctionDecl {
+            name: "sync_ws".into(),
+            method: "WS".into(),
+            path: "/namespaces/{id}/sync".into(),
+            description: "CRDT relay WebSocket".into(),
+        };
+        let json = serde_json::to_string(&decl).unwrap();
+        let parsed: ServerFunctionDecl = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.name, "sync_ws");
+        assert_eq!(parsed.method, "WS");
+    }
+
+    #[test]
+    fn manifest_with_server_functions() {
+        let manifest = GuestManifest::new(
+            "diaryx.sync",
+            "Sync",
+            "1.0.0",
+            "Sync plugin",
+            vec![],
+        )
+        .server_functions(vec![ServerFunctionDecl {
+            name: "sync_ws".into(),
+            method: "WS".into(),
+            path: "/namespaces/{id}/sync".into(),
+            description: "CRDT relay".into(),
+        }]);
+        let json = serde_json::to_string(&manifest).unwrap();
+        let parsed: GuestManifest = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.server_functions.len(), 1);
+        assert_eq!(parsed.server_functions[0].name, "sync_ws");
+    }
+
+    #[test]
+    fn manifest_server_functions_defaults_empty() {
+        let json =
+            r#"{"id":"test","name":"T","version":"1.0","description":"d","capabilities":[]}"#;
+        let m: GuestManifest = serde_json::from_str(json).unwrap();
+        assert!(m.server_functions.is_empty());
     }
 }
