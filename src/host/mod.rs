@@ -67,6 +67,15 @@ extern "ExtismHost" {
 
     // User-provided files
     pub fn host_request_file(input: String) -> String;
+
+    // Namespace
+    pub fn host_namespace_put_object(input: String) -> String;
+    pub fn host_namespace_delete_object(input: String) -> String;
+    pub fn host_namespace_list_objects(input: String) -> String;
+    pub fn host_namespace_sync_audience(input: String) -> String;
+
+    // Hashing
+    pub fn host_hash_file(input: String) -> String;
 }
 
 // ---------------------------------------------------------------------------
@@ -108,3 +117,9 @@ pub mod wasi;
 
 #[cfg(feature = "files")]
 pub mod files;
+
+#[cfg(feature = "namespaces")]
+pub mod namespace;
+
+#[cfg(feature = "core")]
+pub mod hash;
